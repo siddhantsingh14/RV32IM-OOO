@@ -19,12 +19,31 @@ typedef struct packed {         // for the source operands
     logic [31:0] val_2;
 } RFtoIQ;
 
+// when 'bus_valid' signal goes high, set 'done' bit in ROB for 'br_rob_index' high
+// Also, ROB needs an entry that signifies a branch correct-prediction/misprediction and is_br
+// Check the above-mentioned entry when this rob index is being committed to send a flush signal to the fetch unit
+typedef struct packed {
+    logic [4:0] br_rob_index;
+    logic bus_valid;            
+    logic is_mispredict;
+    logic [31:0] target_pc;
+    logic is_jump;
+    logic load_val;
+} FetchToROB;
+
+typedef struct packed {
+    logic flush_all;
+    logic [31:0] target_pc;        // only releveant for fetch_unit
+} ROBToALL;
+
 typedef struct packed {
     logic [4:0] dr;
     logic rob_issue;
     logic load_imm;
     logic [31:0] load_imm_val;
     logic is_st;
+    logic is_br;
+    logic is_jump;
 } IQtoROB;
 
 typedef enum bit [2:0] {

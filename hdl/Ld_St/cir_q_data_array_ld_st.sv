@@ -8,23 +8,23 @@ module cir_q_data_array_ld_st #(
     input clk,
     input rst,
     input read,
-    input logic write, write_1, write_2, write_3, write_4, write_5, write_6, write_7, write_8,
+    input logic write, write_1, write_2, write_3, write_4, write_5, write_6, write_7, write_8, write_9,
     input logic [s_index-1:0] rindex, windex,
-    input logic [31:0] windex_1, windex_2, windex_3, windex_4, windex_5, windex_6, windex_7, windex_8,
-    input logic [2**s_offset-1:0] datain, datain_1, datain_2, datain_3, datain_4, datain_5, datain_6, datain_7, datain_8,
+    input logic [31:0] windex_1, windex_2, windex_3, windex_4, windex_5, windex_6, windex_7, windex_8, windex_9,
+    input logic [2**s_offset-1:0] datain, datain_1, datain_2, datain_3, datain_4, datain_5, datain_6, datain_7, datain_8, datain_9,
     output logic [2**s_offset-1:0] data_at_commit,
     
-	 input logic [31:0] windex_32_1, windex_32_2, windex_32_3, windex_32_4, windex_32_5, windex_32_6, windex_32_7, windex_32_8,
-	 input logic write_32_1, write_32_2, write_32_3, write_32_4, write_32_5, write_32_6, write_32_7, write_32_8,
-	 input logic [2**s_offset-1:0] datain_32_1, datain_32_2, datain_32_3, datain_32_4, datain_32_5, datain_32_6, datain_32_7, datain_32_8,
+	 input logic [31:0] windex_32_1, windex_32_2, windex_32_3, windex_32_4, windex_32_5, windex_32_6, windex_32_7, windex_32_8, windex_32_9,
+	 input logic write_32_1, write_32_2, write_32_3, write_32_4, write_32_5, write_32_6, write_32_7, write_32_8, write_32_9,
+	 input logic [2**s_offset-1:0] datain_32_1, datain_32_2, datain_32_3, datain_32_4, datain_32_5, datain_32_6, datain_32_7, datain_32_8, datain_32_9,
 	 
-    input Ld_St_structs::look_up_rob look_up[7],
-    output Ld_St_structs::output_look_up_rob output_look_up[7],
+    input Ld_St_structs::look_up_rob look_up[8],
+    output Ld_St_structs::output_look_up_rob output_look_up[8],
     //input logic check_done_bit,
     //output logic commit_ready
     // output [4:0] possible_commits, 
-    input Ld_St_structs::look_up_valid look_up_valid[7],
-    output Ld_St_structs::output_look_up_valid output_look_up_valid[7],
+    input Ld_St_structs::look_up_valid look_up_valid[8],
+    output Ld_St_structs::output_look_up_valid output_look_up_valid[8],
     input Ld_St_structs::look_up_rob look_up_mem_address,
     output Ld_St_structs::output_look_up_rob output_look_up_mem_address,
     input Ld_St_structs::look_up_valid look_up_valid_mem_address,
@@ -125,6 +125,15 @@ begin
                     data[i] <= datain_8;
             end
         end
+
+        if (write_9)
+        begin
+            for(int i = 0; i < 32; i++)
+            begin
+                if (windex_9[i] == 1'b1)
+                    data[i] <= datain_9;
+            end
+        end
 				
 		if (write_32_1)
         begin
@@ -198,12 +207,21 @@ begin
             end
         end
 
+        if (write_32_9)
+        begin
+            for(int i = 0; i < 32; i++)
+            begin
+                if (windex_32_9[i] == 1'b1)
+                    data[i] <= datain_32_9;
+            end
+        end
+
     end
 end
 
 always_comb 
 begin
-    for(int i = 0; i < 7; i++)//ROB
+    for(int i = 0; i < 8; i++)//ROB
     begin
         if(look_up[i].valid)
         begin
@@ -225,7 +243,7 @@ begin
 end
 
 always_comb begin
-    for(int i = 0; i < 7; i++)
+    for(int i = 0; i < 8; i++)
     begin
         if(look_up_valid[i].valid)
         begin

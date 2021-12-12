@@ -112,10 +112,8 @@ module RS(
 				 res_st[12].dest_rob <= IQtoRS_br.dest_rob;
 				 res_st[12].alu_ops <= IQtoRS_br.alu_ops;
 				 res_st[12].valid <= 1'b1;
-				 res_st[12].is_jump <= IQtoRS_br.is_jump;
-				 res_st[12].is_jump_r <= IQtoRS_br.is_jump_r;
+				 res_st[12].br_pc_out <= IQtoRS_br.br_pc_out;
 				 res_st[12].pc <= IQtoRS_br.pc;
-				 //res_st[12].br_pc_out <= IQtoRS_br.br_pc_out;;
 				 if(IQtoRS_br.src1_valid)
 				 begin
 					  res_st[12].src1_valid <= IQtoRS_br.src1_valid;
@@ -136,26 +134,6 @@ module RS(
 					  res_st[12].src2_valid <= IQtoRS_br.src2_valid;
 					  res_st[12].src2_rob <= IQtoRS_br.src2_rob;
 				 end
-				 if(IQtoRS_br.br_pc_in1_valid)
-				 begin
-					  res_st[12].br_pc_in1_valid <= IQtoRS_br.br_pc_in1_valid;
-					  res_st[12].br_pc_in1_value <= IQtoRS_br.br_pc_in1_value;
-				 end
-				 else
-				 begin
-					  res_st[12].br_pc_in1_valid <= IQtoRS_br.br_pc_in1_valid;
-					  res_st[12].br_pc_in1_rob <= IQtoRS_br.br_pc_in1_rob;
-				 end
-				 if(IQtoRS_br.br_pc_in2_valid)
-				 begin
-					  res_st[12].br_pc_in2_valid <= IQtoRS_br.br_pc_in2_valid;
-					  res_st[12].br_pc_in2_value <= IQtoRS_br.br_pc_in2_value;
-				 end
-				 else
-				 begin
-					  res_st[12].br_pc_in2_valid <= IQtoRS_br.br_pc_in2_valid;
-					  res_st[12].br_pc_in2_rob <= IQtoRS_br.br_pc_in2_rob;
-				 end
 			end
 			/*Check busses coming from all execution units; TODO:LOAD/STORE UNIT*/
 			if(bus[0].valid)
@@ -171,16 +149,6 @@ module RS(
 					  begin
 							res_st[i].src2_value <= bus[0].value;
 							res_st[i].src2_valid <= 1'b1;
-					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in1_rob == bus[0].dest_rob) && !(res_st[i].br_pc_in1_valid))
-					  begin
-							res_st[i].br_pc_in1_value <= bus[0].value;
-							res_st[i].br_pc_in1_valid <= 1'b1;
-					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in2_rob == bus[0].dest_rob) && !(res_st[i].br_pc_in2_valid))
-					  begin
-							res_st[i].br_pc_in2_value <= bus[0].value;
-							res_st[i].br_pc_in2_valid <= 1'b1;
 					  end
 				 end
 			end
@@ -199,16 +167,6 @@ module RS(
 							res_st[i].src2_value <= bus[1].value;
 							res_st[i].src2_valid <= 1'b1;
 					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in1_rob == bus[1].dest_rob) && !(res_st[i].br_pc_in1_valid))
-					  begin
-							res_st[i].br_pc_in1_value <= bus[1].value;
-							res_st[i].br_pc_in1_valid <= 1'b1;
-					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in2_rob == bus[1].dest_rob) && !(res_st[i].br_pc_in2_valid))
-					  begin
-							res_st[i].br_pc_in2_value <= bus[1].value;
-							res_st[i].br_pc_in2_valid <= 1'b1;
-					  end
 				 end
 			end
 
@@ -225,16 +183,6 @@ module RS(
 					  begin
 							res_st[i].src2_value <= bus[2].value;
 							res_st[i].src2_valid <= 1'b1;
-					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in1_rob == bus[2].dest_rob) && !(res_st[i].br_pc_in1_valid))
-					  begin
-							res_st[i].br_pc_in1_value <= bus[2].value;
-							res_st[i].br_pc_in1_valid <= 1'b1;
-					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in2_rob == bus[2].dest_rob) && !(res_st[i].br_pc_in2_valid))
-					  begin
-							res_st[i].br_pc_in2_value <= bus[2].value;
-							res_st[i].br_pc_in2_valid <= 1'b1;
 					  end
 				 end
 			end
@@ -253,16 +201,6 @@ module RS(
 							res_st[i].src2_value <= bus[3].value;
 							res_st[i].src2_valid <= 1'b1;
 					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in1_rob == bus[3].dest_rob) && !(res_st[i].br_pc_in1_valid))
-					  begin
-							res_st[i].br_pc_in1_value <= bus[3].value;
-							res_st[i].br_pc_in1_valid <= 1'b1;
-					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in2_rob == bus[3].dest_rob) && !(res_st[i].br_pc_in2_valid))
-					  begin
-							res_st[i].br_pc_in2_value <= bus[3].value;
-							res_st[i].br_pc_in2_valid <= 1'b1;
-					  end
 				 end
 			end
 
@@ -279,16 +217,6 @@ module RS(
 					  begin
 							res_st[i].src2_value <= bus[4].value;
 							res_st[i].src2_valid <= 1'b1;
-					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in1_rob == bus[4].dest_rob) && !(res_st[i].br_pc_in1_valid))
-					  begin
-							res_st[i].br_pc_in1_value <= bus[4].value;
-							res_st[i].br_pc_in1_valid <= 1'b1;
-					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in2_rob == bus[4].dest_rob) && !(res_st[i].br_pc_in2_valid))
-					  begin
-							res_st[i].br_pc_in2_value <= bus[4].value;
-							res_st[i].br_pc_in2_valid <= 1'b1;
 					  end
 				 end
 			end
@@ -307,16 +235,6 @@ module RS(
 							res_st[i].src2_value <= LD_ST_bus.value;
 							res_st[i].src2_valid <= 1'b1;
 					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in1_rob == LD_ST_bus.dest_rob) && !(res_st[i].br_pc_in1_valid))
-					  begin
-							res_st[i].br_pc_in1_value <= LD_ST_bus.value;
-							res_st[i].br_pc_in1_valid <= 1'b1;
-					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in2_rob == LD_ST_bus.dest_rob) && !(res_st[i].br_pc_in2_valid))
-					  begin
-							res_st[i].br_pc_in2_value <= LD_ST_bus.value;
-							res_st[i].br_pc_in2_valid <= 1'b1;
-					  end
 				 end
 			end
 
@@ -334,16 +252,6 @@ module RS(
 							res_st[i].src2_value <= data_bus_CMP.value;
 							res_st[i].src2_valid <= 1'b1;
 					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in1_rob == data_bus_CMP.dest_rob) && !(res_st[i].br_pc_in1_valid))
-					  begin
-							res_st[i].br_pc_in1_value <= data_bus_CMP.value;
-							res_st[i].br_pc_in1_valid <= 1'b1;
-					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in2_rob == data_bus_CMP.dest_rob) && !(res_st[i].br_pc_in2_valid))
-					  begin
-							res_st[i].br_pc_in2_value <= data_bus_CMP.value;
-							res_st[i].br_pc_in2_valid <= 1'b1;
-					  end
 				 end
 			end
 
@@ -360,16 +268,6 @@ module RS(
 					  begin
 							res_st[i].src2_value <= rob_to_regfile.value;
 							res_st[i].src2_valid <= 1'b1;
-					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in1_rob == rob_to_regfile.rob_idx) && !(res_st[i].br_pc_in1_valid))
-					  begin
-							res_st[i].br_pc_in1_value <= rob_to_regfile.value;
-							res_st[i].br_pc_in1_valid <= 1'b1;
-					  end
-					  if((res_st[i].valid) && (res_st[i].br_pc_in2_rob == rob_to_regfile.rob_idx) && !(res_st[i].br_pc_in2_valid))
-					  begin
-							res_st[i].br_pc_in2_value <= rob_to_regfile.value;
-							res_st[i].br_pc_in2_valid <= 1'b1;
 					  end
 				 end
 			end
@@ -492,19 +390,15 @@ module RS(
 				evict[(i/2)].evict_idx = '0;
 			end
 	  end
-	if((res_st[12].valid) && (res_st[12].src1_valid) && (res_st[12].src2_valid) && (res_st[12].br_pc_in1_valid) && (res_st[12].br_pc_in2_valid))
+	if((res_st[12].valid) && (res_st[12].src1_valid) && (res_st[12].src2_valid))
 		begin
 		RStoCMP_br.ld_cmp = 1'b1;
 		RStoCMP_br.cmp_op = res_st[12].alu_ops;
 		RStoCMP_br.cmp_src1 = res_st[12].src1_value;
 		RStoCMP_br.cmp_src2 = res_st[12].src2_value;
-		//RStoCMP_br.br_pc_out = res_st[12].br_pc_out;
+		RStoCMP_br.br_pc_out = res_st[12].br_pc_out;
 		RStoCMP_br.pc = res_st[12].pc;
-		RStoCMP_br.is_jump = res_st[12].is_jump;
-		RStoCMP_br.is_jump_r = res_st[12].is_jump_r;
 		RStoCMP_br.rob_idx = res_st[12].dest_rob;
-		RStoCMP_br.br_pc_in1_value = res_st[12].br_pc_in1_value;
-		RStoCMP_br.br_pc_in2_value = res_st[12].br_pc_in2_value;
 		evict[6].do_evict = 1'b1;
 		//evict[6].evict_idx = i;
 	end
@@ -514,7 +408,7 @@ module RS(
 		RStoCMP_br.cmp_op = '0;
 		RStoCMP_br.cmp_src1 = '0;
 		RStoCMP_br.cmp_src2 = '0;
-		//RStoCMP_br.br_pc_out = '0;
+		RStoCMP_br.br_pc_out = '0;
 		RStoCMP_br.pc = '0;
 		RStoCMP_br.rob_idx = '0;
 		evict[6].do_evict = '0;

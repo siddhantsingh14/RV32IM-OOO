@@ -1,0 +1,104 @@
+module fetch_unit1(
+    input clk,
+    input rst,
+
+    input logic [31:0] mem_rdata,
+    input mem_resp,
+    input logic commit_inst_q,                   // commit signal from instruction scheduler to pop an inst.
+
+    input rv_structs::data_bus_CMP_br data_bus_CMP_br,
+
+    output logic mem_read,
+    output logic [31:0] mem_address,
+
+    output logic inst_q_empty,
+
+    output logic [31:0] inst1,                   // undecoded instruction at commit_ptr
+    output logic [31:0] pc_out_val
+);
+
+logic load_pc, load_mar, read_bht, val_br_bus, check_bht, mispredicted;
+logic [31:0] pc_reg_in, pc_reg_out, mar_reg_in, mem_reg_out, inst;
+logic [31:0] pc_curr, pc_curr_br_bus, predicted_pc;
+logic load_inst_q, inst_q_full, inst_q_pc_full, inst_q_pc_empty;
+logic [31:0] pc_in_q, pc_out_q, pc_out_q_1;
+
+assign pc_out_val = pc_out_q_1;
+
+enum int unsigned {
+    FETCH1,
+    FETCH2
+}   curr_state, next_state;
+
+always_comb begin 
+    read_bht = 1'b0;
+    load_mar = 1'b0;
+    load_pc = 1'b0;
+    pc_curr = '0;
+    check_bht = 1'b0;
+    mar_reg_in = '0;
+    pc_reg_in = '0;
+    pc_in_q = '0;
+    load_inst_q = 1'b0;
+    pc_curr_br_bus = '0;
+    pc_out_br_bus = '0;
+    val_br_bus = '0;
+
+    unique case (curr_state)
+        FETCH1  :   begin
+            mar_reg_in = pc_reg_out;
+            pc_curr = pc_reg_out;
+            load_mar = 1'b1;
+            read_bht = 1'b1;
+        end
+        FETCH2  :   begin
+            pc_reg_in = predicted_pc;
+            pc_in_q = pc_reg_out;
+            load_pc = 1'b1;
+            load_inst_q = 1'b1;
+        end
+    endcase
+
+    if (data_bus_CMP_br.valid) begin    // br_RS has responded with a resolved branch. Initiate check for misprediction.
+        pc_curr_br_bus = data_bus_CMP_br.pc;
+        pc_out_br_bus = data_bus_CMP_br.br_pc_out;
+        val_br_bus = data_bus_CMP_br.val;
+        check_bht = 1'b1;
+        //if (mispredicted)               // if mispredicted, update bht, btb
+    end
+end
+
+always_comb begin
+    next_state = curr_state;
+
+    unique case (curr_state)
+        FETCH1  :   next_state = FETCH2;
+        FETCH2  :   next_state = mem_resp ? FETCH1 : FETCH2;
+    endcase
+end
+
+always_ff @(posedge clk) begin
+    if (rst)
+        curr_state <= FETCH1;
+    else 
+        curr_state <= next_state; 
+end
+
+pc_reg pc (clk, rst, load_pc, pc_reg_in, pc_reg_out);
+register MAR (clk, rst, load_mar, mar_reg_in, mem_reg_out);
+bht history_table (clk, rst, read_bht, check_bht, pc_curr, pc_curr_br_bus, pc_out_br_bus, val_br_bus, predicted_pc, mispredicted);
+inst_q inst_q (clk, rst, load_inst_q, commit_inst_q, mem_rdata, inst, inst1, inst_q_full, inst_q_empty);
+inst_q inst_q_pc (clk, rst, load_inst_q, commit_inst_q, pc_in_q, pc_out_q, pc_out_q_1, inst_q_pc_full, inst_q_pc_empty);
+
+endmodule : fetch_unit1
+
+/* Notes:
+
+FETCH1 :-
+    pc_reg holds 0x60
+    mar_reg holds 0x60 in next clock cycle - FETCH2 (with mem_read on) 
+
+    With the predictor,
+        FETCH1 : pc_curr = pc_reg_out (to predictor) 
+        FETCH2 : mar_reg_in = pc_reg_out and pc_reg_in = pc_next (from predictor)
+*/

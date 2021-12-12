@@ -12,19 +12,25 @@ module inst_sched(
     input logic [4:0] rob_issue_ptr,      // ROB  -> SCHD
     input logic inst_q_empty,       // IQ   -> SCHD
 
-    input logic [1:0] RS_unit1, RS_unit2, RS_unit3, RS_unit4, RS_unit5, // RS   -> IQ
-    input logic [1:0] RS_unit6, 
+    input logic [1:0] RS_unit1, RS_unit2, RS_unit3, RS_unit4, RS_unit5, // ALU
+    input logic [1:0] RS_unit6,     // CMP
+    input logic [1:0] RS_unit7, RS_unit8,     // Special br RS
 
     input rv_structs::data_bus bus[5],
     
     input sched_structs::RFtoIQ RFtoIQ,
     input logic br_RS_full,
     input logic ld_st_RS_full,
+    input logic ROBtoIQ_br_jump_present,
+    input logic br_st_q_empty,              //br_st_manager -> Inst. Sched.
+    input logic br_st_q_full,
     
     output logic commit_inst_q,           // SCHD -> IQ
     output logic [31:0] pc_new,
     output logic [1:0] pcmux_sel,               // IQ   -> Fetch Unit
-    output logic is_op_br,                          
+    output logic is_op_br,  
+
+    output logic issue_br_st_q,            // Inst. Sched. -> br_st_manager                        
 
     output sched_structs::IQtoRF IQtoRF,
     output sched_structs::IQtoROB IQtoROB,
@@ -49,15 +55,18 @@ logic [4:0] rs1;
 logic [4:0] rs2;
 logic [4:0] rd;
 logic br_en_inst_schd;
-logic RS_availability_flag;
-logic RS_availability_flag_cmp;
 
-logic [31:0] br_CMP_a, br_CMP_b, br_ALU_a, br_ALU_b, br_ALU_out;
-logic load_br_CMP, load_br_ALU;
+logic [9:0] freeRSALU;
+logic [1:0] freeRSCMP;
+logic [3:0] freeRSBR;
 
 arith_funct3_t arith_funct3;
 branch_funct3_t branch_funct3;
 load_funct3_t load_funct3;
+
+assign freeRSALU = {RS_unit1, RS_unit2, RS_unit3, RS_unit4, RS_unit5};
+assign freeRSCMP = RS_unit6;
+assign freeRSBR = {RS_unit7, RS_unit8};
 
 always_comb begin
     commit_inst_q = 1'b0;       
@@ -77,17 +86,9 @@ always_comb begin
     rd = '0;
     pcmux_sel = '0;
     // load_pc = '0;
-    load_br_CMP = '0;
-    load_br_ALU = '0;
-    br_ALU_a = '0;
-    br_ALU_b = '0;
-    br_CMP_a = '0;
-    br_CMP_b = '0;
 	pc_new = '0;
     is_op_br = 1'b0;
-
-    RS_availability_flag='0;
-    RS_availability_flag_cmp='0;
+    issue_br_st_q = 1'b0;
 
     IQtoRF = '{default: '0};
     IQtoROB = '{default: '0};
@@ -96,11 +97,9 @@ always_comb begin
     IQtoRS_br = '{default: '0};
     IQtoRS_ld_st = '{default: '0};
 
-    //TODO :: Add logic for checking if at least one RS is available
+    if (~rob_q_full & ~inst_q_empty & ~br_st_q_full) begin
 
-    if (~rob_q_full & ~inst_q_empty & ~ld_st_RS_full & ~br_RS_full & (~(RS_unit1 == '1 & RS_unit2 == '1  & RS_unit3 == '1 & RS_unit4 == '1 & RS_unit5 == '1 & RS_unit6 == '1))) begin
-
-        commit_inst_q = 1'b1;       // increment commit_ptr in IQ
+        commit_inst_q = 1'b1;       // increment commit_ptr in IQ; bound to change further down the combinational logic
         funct3 = inst[14:12];
         funct7 = inst[31:25];
         opcode = rv32i_opcode'(inst[6:0]);
@@ -118,7 +117,7 @@ always_comb begin
 
         // RegFile Look-Up here
         unique case (opcode)
-        op_load,
+        op_load, op_jalr,
         op_imm  :   begin
             IQtoRF.lookup_regfile_1 = 1'b1;
             IQtoRF.reg_idx_1 = rs1;
@@ -132,14 +131,16 @@ always_comb begin
             IQtoRF.reg_idx_2 = rs2;
         end
 
-        op_lui, 
+        op_lui, op_jal,
         op_auipc:   ;
         endcase
 
         // RegFile look-up done. Issue inst. to RS, ROB, and RF
-        if ((RFtoIQ.lookup_valid_1 | RFtoIQ.lookup_valid_2) | (opcode == op_lui) | (opcode == op_auipc)) begin
+        if ((RFtoIQ.lookup_valid_1 | RFtoIQ.lookup_valid_2) | (opcode == op_lui) | (opcode == op_auipc) | (opcode == op_jal)) begin
             unique case (opcode)
             op_load :   begin
+                if (ld_st_RS_full | ~br_st_q_empty) commit_inst_q = 1'b0;
+                else begin
                 if(RFtoIQ.valid_1) begin             // RegFile responded and operand 1 is ready
                     IQtoRS_ld_st.src1_val = RFtoIQ.val_1; 
                     IQtoRS_ld_st.src1_valid = 1'b1;  
@@ -174,9 +175,12 @@ always_comb begin
                 IQtoLD_ST.valid_src_mem_addr = 1'b0;
                 IQtoLD_ST.dest_rob = rob_issue_ptr;
                 IQtoLD_ST.funct3 = load_funct3;
+                end
             end
 
             op_store:   begin
+                if (ld_st_RS_full | ~br_st_q_empty) commit_inst_q = 1'b0;
+                else begin
                 if(RFtoIQ.valid_1) begin     
                     IQtoRS_ld_st.src1_val = RFtoIQ.val_1; 
                     IQtoRS_ld_st.src1_valid = 1'b1;  
@@ -212,6 +216,7 @@ always_comb begin
                 IQtoLD_ST.src_rob_mem_addr = rob_issue_ptr;
                 IQtoLD_ST.valid_src_mem_addr = 1'b0;
                 IQtoLD_ST.dest_rob = rob_issue_ptr;
+                IQtoLD_ST.funct3 = load_funct3;
 
                 for (int i = 0; i < 5; i++) begin
                     if (bus[i].valid & ~RFtoIQ.valid_1 & (bus[i].dest_rob == RFtoIQ.val_1[4:0])) begin
@@ -225,83 +230,120 @@ always_comb begin
                 IQtoROB.load_imm = 1'b1;
                 IQtoROB.load_imm_val = 'x;
                 IQtoROB.is_st = '1;
+                end
             end
 
             op_imm  :   begin
-                if(RFtoIQ.valid_1) begin             // RegFile responded and operand 1 is ready
-                    IQtoRS.src1_value = RFtoIQ.val_1; 
-                    IQtoRS.src1_valid = 1'b1;  
-                end
-                else begin                          // RegFile responded but operand 1 is not ready
-                    IQtoRS.src1_rob = RFtoIQ.val_1[4:0];
-                    IQtoRS.src1_valid = 1'b0;  
-                end
-                IQtoRS.src2_value = i_imm;
-                IQtoRS.src2_valid = 1'b1;
-                IQtoRS.load_RS = 1'b1;
-                IQtoRS.dest_rob = rob_issue_ptr;
                 unique case (arith_funct3)
-                    slt     :   IQtoRS.alu_ops = 3'b100;       // TODO:: cmp module
-                    sltu    :   IQtoRS.alu_ops = 3'b110;
-                    sr      :   IQtoRS.alu_ops = funct7[5] ? 3'b010 : 3'b101; 
-                    add, sll, axor, aor,
-                    aand    :   IQtoRS.alu_ops = funct3;
-                endcase
-                IQtoRF.rd = rd;
-                IQtoRF.rob_index = rob_issue_ptr;
-                IQtoRF.write = 1'b1;
-                for (int i = 0; i < 5; i++) begin
-                    if (bus[i].valid & ~RFtoIQ.valid_1 & (bus[i].dest_rob == RFtoIQ.val_1[4:0])) begin
-                        IQtoRS.src1_value = bus[i].value;
-                        IQtoRS.src1_valid = 1'b1;
+                    slt     :   begin
+                        if (freeRSCMP == '1) commit_inst_q = 1'b0;
+                        IQtoRS.alu_ops = 3'b100;       // TODO:: cmp module
                     end
+                    sltu    :   begin
+                        if (freeRSCMP == '1) commit_inst_q = 1'b0;
+                        IQtoRS.alu_ops = 3'b110;
+                    end
+                    sr      :   begin
+                        if (freeRSALU == '1) commit_inst_q = 1'b0;
+                        IQtoRS.alu_ops = funct7[5] ? 3'b010 : 3'b101; 
+                    end
+                    add, sll, axor, aor,
+                    aand    :   begin
+                        if (freeRSALU == '1) commit_inst_q = 1'b0;
+                        IQtoRS.alu_ops = funct3;
+                    end
+                endcase
+
+                if (commit_inst_q) begin
+                    if(RFtoIQ.valid_1) begin             // RegFile responded and operand 1 is ready
+                        IQtoRS.src1_value = RFtoIQ.val_1; 
+                        IQtoRS.src1_valid = 1'b1;  
+                    end
+                    else begin                          // RegFile responded but operand 1 is not ready
+                        IQtoRS.src1_rob = RFtoIQ.val_1[4:0];
+                        IQtoRS.src1_valid = 1'b0;  
+                    end
+                    IQtoRS.src2_value = i_imm;
+                    IQtoRS.src2_valid = 1'b1;
+                    IQtoRS.load_RS = 1'b1;
+                    IQtoRS.dest_rob = rob_issue_ptr;
+
+                    IQtoRF.rd = rd;
+                    IQtoRF.rob_index = rob_issue_ptr;
+                    IQtoRF.write = 1'b1;
+                    for (int i = 0; i < 5; i++) begin
+                        if (bus[i].valid & ~RFtoIQ.valid_1 & (bus[i].dest_rob == RFtoIQ.val_1[4:0])) begin
+                            IQtoRS.src1_value = bus[i].value;
+                            IQtoRS.src1_valid = 1'b1;
+                        end
+                    end
+                    IQtoROB.dr = rd;
+                    IQtoROB.rob_issue = 1'b1;
                 end
-                IQtoROB.dr = rd;
-                IQtoROB.rob_issue = 1'b1;
             end
 
             op_reg  :   begin
-                if(RFtoIQ.valid_1) begin     
-                    IQtoRS.src1_value = RFtoIQ.val_1; 
-                    IQtoRS.src1_valid = 1'b1;  
-                end
-                else begin                  
-                    IQtoRS.src1_rob = RFtoIQ.val_1[4:0];
-                    IQtoRS.src1_valid = 1'b0;  
-                end
-                if(RFtoIQ.valid_2)begin     
-                    IQtoRS.src2_value = RFtoIQ.val_2; 
-                    IQtoRS.src2_valid = 1'b1;   
-                end
-                else begin                  
-                    IQtoRS.src2_rob = RFtoIQ.val_2[4:0];
-                    IQtoRS.src2_valid = 1'b0;
-                end
-                IQtoRS.load_RS = 1'b1;
-                IQtoRS.dest_rob = rob_issue_ptr;
                 unique case (arith_funct3)
-                    slt     :   IQtoRS.alu_ops = 3'b100;       
-                    sltu    :   IQtoRS.alu_ops = 3'b110;
-                    sr      :   IQtoRS.alu_ops = funct7[5] ? 3'b010 : 3'b101; 
+                    slt     :   begin
+                        if (freeRSCMP == '1) commit_inst_q = 1'b0;
+                        IQtoRS.alu_ops = 3'b100; 
+                    end    
+                    sltu    :   begin
+                        if (freeRSCMP == '1) commit_inst_q = 1'b0;
+                        IQtoRS.alu_ops = 3'b110;
+                    end
+                    sr      :   begin
+                        if (freeRSALU == '1) commit_inst_q = 1'b0;
+                        IQtoRS.alu_ops = funct7[5] ? 3'b010 : 3'b101;
+                    end 
                     sll, axor, aor,
-                    aand    :   IQtoRS.alu_ops = funct3;
-                    add     :   IQtoRS.alu_ops = funct7[5] ? 3'b011 : 3'b000;
+                    aand    :   begin
+                        if (freeRSALU == '1) commit_inst_q = 1'b0;
+                        IQtoRS.alu_ops = funct3;
+                    end
+                    add     :   begin
+                        if (freeRSALU == '1) commit_inst_q = 1'b0;
+                        IQtoRS.alu_ops = funct7[5] ? 3'b011 : 3'b000;
+                    end
                 endcase
-                IQtoRF.rd = rd;
-                IQtoRF.rob_index = rob_issue_ptr;
-                IQtoRF.write = 1'b1;
-                for (int i = 0; i < 5; i++) begin
-                    if (bus[i].valid & ~RFtoIQ.valid_1 & (bus[i].dest_rob == RFtoIQ.val_1[4:0])) begin
-                        IQtoRS.src1_value = bus[i].value;
-                        IQtoRS.src1_valid = 1'b1;
+
+                if (commit_inst_q) begin
+                    if(RFtoIQ.valid_1) begin     
+                        IQtoRS.src1_value = RFtoIQ.val_1; 
+                        IQtoRS.src1_valid = 1'b1;  
                     end
-                    if (bus[i].valid & ~RFtoIQ.valid_2 & (bus[i].dest_rob == RFtoIQ.val_2[4:0])) begin
-                        IQtoRS.src2_value = bus[i].value;
-                        IQtoRS.src2_valid = 1'b1;
+                    else begin                  
+                        IQtoRS.src1_rob = RFtoIQ.val_1[4:0];
+                        IQtoRS.src1_valid = 1'b0;  
                     end
+                    if(RFtoIQ.valid_2)begin     
+                        IQtoRS.src2_value = RFtoIQ.val_2; 
+                        IQtoRS.src2_valid = 1'b1;   
+                    end
+                    else begin                  
+                        IQtoRS.src2_rob = RFtoIQ.val_2[4:0];
+                        IQtoRS.src2_valid = 1'b0;
+                    end
+
+                    IQtoRS.load_RS = 1'b1;
+                    IQtoRS.dest_rob = rob_issue_ptr;
+                    IQtoRF.rd = rd;
+                    IQtoRF.rob_index = rob_issue_ptr;
+                    IQtoRF.write = 1'b1;
+
+                    for (int i = 0; i < 5; i++) begin
+                        if (bus[i].valid & ~RFtoIQ.valid_1 & (bus[i].dest_rob == RFtoIQ.val_1[4:0])) begin
+                            IQtoRS.src1_value = bus[i].value;
+                            IQtoRS.src1_valid = 1'b1;
+                        end
+                        if (bus[i].valid & ~RFtoIQ.valid_2 & (bus[i].dest_rob == RFtoIQ.val_2[4:0])) begin
+                            IQtoRS.src2_value = bus[i].value;
+                            IQtoRS.src2_valid = 1'b1;
+                        end
+                    end
+                    IQtoROB.dr = rd;
+                    IQtoROB.rob_issue = 1'b1;
                 end
-                IQtoROB.dr = rd;
-                IQtoROB.rob_issue = 1'b1;
             end
 
             op_lui  :   begin      
@@ -329,10 +371,13 @@ always_comb begin
                 IQtoROB.rob_issue = 1'b1;
             end
             
-            
             op_br   :   begin
-                IQtoRS_br.alu_ops = funct3;
                 is_op_br = 1'b1;
+
+                if (br_RS_full == '1) commit_inst_q = 1'b0;
+                else begin
+                IQtoRS_br.alu_ops = funct3;
+                issue_br_st_q = 1'b1;
 
                 if (RFtoIQ.valid_1) begin
                     IQtoRS_br.src1_valid = 1'b1;
@@ -340,7 +385,7 @@ always_comb begin
                 end
                 else begin
                     IQtoRS_br.src1_valid = 1'b0;
-                    IQtoRS_br.src1_value = RFtoIQ.val_1[4:0];
+                    IQtoRS_br.src1_rob = RFtoIQ.val_1[4:0];
                 end
                 if (RFtoIQ.valid_2) begin
                     IQtoRS_br.src2_valid = 1'b1;
@@ -348,14 +393,20 @@ always_comb begin
                 end
                 else begin
                     IQtoRS_br.src2_valid = 1'b0;
-                    IQtoRS_br.src2_value = RFtoIQ.val_2[4:0];
+                    IQtoRS_br.src2_rob = RFtoIQ.val_2[4:0];
                 end
-                
-                load_br_ALU = 1'b1;
-                br_ALU_a = pc_out_val;
-                br_ALU_b = b_imm;
+
+                IQtoROB.dr = rd;
+                IQtoROB.rob_issue = 1'b1;
+                IQtoROB.is_br = 1'b1;
+
                 IQtoRS_br.load_RS = 1'b1;
-                IQtoRS_br.br_pc_out = br_ALU_out;
+                IQtoRS_br.br_pc_in1_value = pc_out_val;
+                IQtoRS_br.br_pc_in2_value = b_imm;
+                IQtoRS_br.br_pc_in1_valid = 1'b1;
+                IQtoRS_br.br_pc_in2_valid = 1'b1;
+                IQtoRS_br.pc = pc_out_val;
+                IQtoRS_br.dest_rob = rob_issue_ptr;
 
                 for (int i = 0; i < 5; i++) begin       // handling bus broadcasts
                     if (bus[i].valid & ~RFtoIQ.valid_1 & (bus[i].dest_rob == RFtoIQ.val_1[4:0])) begin
@@ -367,181 +418,130 @@ always_comb begin
                         IQtoRS_br.src2_valid = 1'b1;
                     end
                 end
+                end
+            end
+
+            op_jal  :   begin
+                if (br_RS_full == '1) commit_inst_q = 1'b0;
+                else begin
+                    issue_br_st_q = 1'b1;
+                    IQtoRS_br.load_RS = 1'b1;
+                    IQtoRS_br.is_jump = 1'b1;
+                    IQtoRS_br.dest_rob = rob_issue_ptr;
+                    IQtoRS_br.alu_ops = 3'b000;
+                    IQtoRS_br.src1_valid = 1'b1;
+                    IQtoRS_br.src1_value = '0;
+                    IQtoRS_br.src2_valid = 1'b1;
+                    IQtoRS_br.src2_value = '0;
+                    IQtoRS_br.br_pc_in1_valid = 1'b1;
+                    IQtoRS_br.br_pc_in2_valid = 1'b1;
+                    IQtoRS_br.br_pc_in1_value = pc_out_val;
+                    IQtoRS_br.br_pc_in2_value = j_imm;
+                    IQtoRS_br.pc = pc_out_val;
+
+                    IQtoRF.rd = rd;
+                    IQtoRF.rob_index = rob_issue_ptr;
+                    IQtoRF.write = 1'b1;
+
+                    IQtoROB.dr = rd;
+                    IQtoROB.rob_issue = 1'b1;
+                    IQtoROB.load_imm = 1'b1;
+                    IQtoROB.load_imm_val = pc_out_val + 4;
+                    IQtoROB.is_jump = 1'b1;
+                end
+            end
+
+            op_jalr :   begin
+                if (br_RS_full == '1) commit_inst_q = 1'b0;
+                else begin
+                    issue_br_st_q = 1'b1;
+                    IQtoRS_br.load_RS = 1'b1;
+                    IQtoRS_br.is_jump_r = 1'b1;
+                    IQtoRS_br.dest_rob = rob_issue_ptr;
+                    IQtoRS_br.alu_ops = 3'b000;
+                    IQtoRS_br.src1_valid = 1'b1;
+                    IQtoRS_br.src1_value = '0;
+                    IQtoRS_br.src2_valid = 1'b1;
+                    IQtoRS_br.src2_value = '0;
+
+                    if(RFtoIQ.valid_1) begin             // RegFile responded and operand 1 is ready
+                        IQtoRS_br.br_pc_in1_value = RFtoIQ.val_1; 
+                        IQtoRS_br.br_pc_in1_valid = 1'b1;  
+                    end
+                    else begin                          // RegFile responded but operand 1 is not ready
+                        IQtoRS_br.br_pc_in1_rob = RFtoIQ.val_1[4:0];
+                        IQtoRS_br.br_pc_in1_valid = 1'b0;  
+                    end
+
+                    IQtoRS_br.br_pc_in2_valid = 1'b1;
+                    IQtoRS_br.br_pc_in2_value = i_imm;
+                    IQtoRS_br.pc = pc_out_val;
+
+                    for (int i = 0; i < 5; i++) begin
+                        if (bus[i].valid & ~RFtoIQ.valid_1 & (bus[i].dest_rob == RFtoIQ.val_1[4:0])) begin
+                            IQtoRS_br.br_pc_in1_value = bus[i].value;
+                            IQtoRS_br.br_pc_in1_valid = 1'b1;
+                        end
+                    end
+
+                    IQtoRF.rd = rd;
+                    IQtoRF.rob_index = rob_issue_ptr;
+                    IQtoRF.write = 1'b1;
+
+                    IQtoROB.dr = rd;
+                    IQtoROB.rob_issue = 1'b1;
+                    IQtoROB.load_imm = 1'b1;
+                    IQtoROB.is_jump = 1'b1;
+                    IQtoROB.load_imm_val = pc_out_val + 4;
+                end
             end
             endcase
 
-            // TODO::logic for IQtoRS.RS_sel 
-            unique case(RS_unit1)
-                00: begin
-                    if(~RS_availability_flag)   begin
-                        IQtoRS.RS_sel = 4'd0;
-                        RS_availability_flag=1'b1;
-                    end
-                end
-                01: begin
-                    if(~RS_availability_flag)   begin
-                        IQtoRS.RS_sel = 4'd1;
-                        RS_availability_flag=1'b1;
-                    end
-                end
-                10: begin
-                    if(~RS_availability_flag)   begin
-                        IQtoRS.RS_sel = 4'd0;
-                        RS_availability_flag=1'b1;
-                    end
-                end
-                11:;
-            endcase
+            if (~freeRSBR[3])
+                IQtoRS_br.RS_sel = 0;
+            else if (~freeRSBR[1])
+                IQtoRS_br.RS_sel = 2;
+            else if (~freeRSBR[2])
+                IQtoRS_br.RS_sel = 1;
+            else if (~freeRSBR[0])
+                IQtoRS_br.RS_sel = 3; 
 
-            unique case(RS_unit2)
-                00: begin
-                    if(~RS_availability_flag)   begin
-                        IQtoRS.RS_sel = 4'd2;
-                        RS_availability_flag=1'b1;
-                    end
-                end
-                01: begin
-                    if(~RS_availability_flag)   begin
-                        IQtoRS.RS_sel = 4'd3;
-                        RS_availability_flag=1'b1;
-                    end
-                end
-                10: begin
-                    if(~RS_availability_flag)   begin
-                        IQtoRS.RS_sel = 4'd2;
-                        RS_availability_flag=1'b1;
-                    end
-                end
-                11:;
-            endcase
+            if(~freeRSALU[9])
+                IQtoRS.RS_sel = 0;
+            else if(~freeRSALU[7])
+                IQtoRS.RS_sel = 2;
+            else if(~freeRSALU[5])
+                IQtoRS.RS_sel = 4;
+            else if(~freeRSALU[3])
+                IQtoRS.RS_sel = 6;
+            else if(~freeRSALU[1])
+                IQtoRS.RS_sel = 8;
+            else if(~freeRSALU[8])
+                IQtoRS.RS_sel = 1;
+            else if(~freeRSALU[6])
+                IQtoRS.RS_sel = 3;
+            else if(~freeRSALU[4])
+                IQtoRS.RS_sel = 5;
+            else if(~freeRSALU[2])
+                IQtoRS.RS_sel = 7;
+            else if(~freeRSALU[0])
+                IQtoRS.RS_sel = 9;
+             
 
-            unique case(RS_unit3)
-                00: begin
-                    if(~RS_availability_flag)   begin
-                        IQtoRS.RS_sel = 4'd4;
-                        RS_availability_flag=1'b1;
-                    end
-                end
-                01: begin
-                    if(~RS_availability_flag)   begin
-                        IQtoRS.RS_sel = 4'd5;
-                        RS_availability_flag=1'b1;
-                    end
-                end
-                10: begin
-                    if(~RS_availability_flag)   begin
-                        IQtoRS.RS_sel = 4'd4;
-                        RS_availability_flag=1'b1;
-                    end
-                end
-                11:;
-            endcase
-
-            unique case(RS_unit4)
-                00: begin
-                    if(~RS_availability_flag)   begin
-                        IQtoRS.RS_sel = 4'd6;
-                        RS_availability_flag=1'b1;
-                    end
-                end
-                01: begin
-                    if(~RS_availability_flag)   begin
-                        IQtoRS.RS_sel = 4'd7;
-                        RS_availability_flag=1'b1;
-                    end
-                end
-                10: begin
-                    if(~RS_availability_flag)   begin
-                        IQtoRS.RS_sel = 4'd6;
-                        RS_availability_flag=1'b1;
-                    end
-                end
-                11:;
-            endcase
-
-            unique case(RS_unit5)
-                00: begin
-                    if(~RS_availability_flag)   begin
-                        IQtoRS.RS_sel = 4'd8;
-                        RS_availability_flag=1'b1;
-                    end
-                end
-                01: begin
-                    if(~RS_availability_flag)   begin
-                        IQtoRS.RS_sel = 4'd9;
-                        RS_availability_flag=1'b1;
-                    end
-                end
-                10: begin
-                    if(~RS_availability_flag)   begin
-                        IQtoRS.RS_sel = 4'd8;
-                        RS_availability_flag=1'b1;
-                    end
-                end
-                11:;
-            endcase
-
-            if (opcode == op_imm) begin
-                if (arith_funct3 == 3'b010 | arith_funct3 == 3'b011) begin
-                    unique case(RS_unit6)
-                    00: begin
-                        if(~RS_availability_flag_cmp)   begin
-                            IQtoRS.RS_sel = 4'd10;
-                            RS_availability_flag_cmp=1'b1;
-                        end
-                    end
-                    01: begin
-                        if(~RS_availability_flag_cmp)   begin
-                            IQtoRS.RS_sel = 4'd11;
-                            RS_availability_flag_cmp=1'b1;
-                        end
-                    end
-                    10: begin
-                        if(~RS_availability_flag_cmp)   begin
-                            IQtoRS.RS_sel = 4'd10;
-                            RS_availability_flag_cmp=1'b1;
-                        end
-                    end
-                    11:;
+            if (opcode == op_imm | opcode == op_reg) begin
+                if (arith_funct3 == slt | arith_funct3 == sltu) begin
+                    unique case(freeRSCMP)
+                        2'b00   :   IQtoRS.RS_sel = 10;
+                        2'b01   :   IQtoRS.RS_sel = 10;
+                        2'b10   :   IQtoRS.RS_sel = 11;
+                        2'b11   :   ;
                     endcase
                 end
             end
-
-            if (opcode == op_reg) begin
-                if (arith_funct3 == 3'b010 | arith_funct3 == 3'b011) begin
-                    unique case(RS_unit6)
-                    00: begin
-                        if(~RS_availability_flag_cmp)   begin
-                            IQtoRS.RS_sel = 4'd10;
-                            RS_availability_flag_cmp=1'b1;
-                        end
-                    end
-                    01: begin
-                        if(~RS_availability_flag_cmp)   begin
-                            IQtoRS.RS_sel = 4'd11;
-                            RS_availability_flag_cmp=1'b1;
-                        end
-                    end
-                    10: begin
-                        if(~RS_availability_flag_cmp)   begin
-                            IQtoRS.RS_sel = 4'd10;
-                            RS_availability_flag_cmp=1'b1;
-                        end
-                    end
-                    11:;
-                    endcase
-                end
-            end
-
-            // TODO::logic for accepting ALU broadcasts
-
-            // Handling IQ -> ROB
+        
         end
     end
 end
-
-cmp_schd br_CMP_schd (load_br_CMP, branch_funct3, br_CMP_a, br_CMP_b, br_en_inst_schd);
-alu_schd br_ALU_schd (load_br_ALU, br_ALU_a, br_ALU_b, br_ALU_out);
 
 endmodule : inst_sched
 

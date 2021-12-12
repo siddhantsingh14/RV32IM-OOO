@@ -22,7 +22,7 @@ module cir_q #(
     
     output logic [2**cir_q_offset-1:0] dataout,
     output logic [2**cir_q_offset-1:0] dataout_commit,
-    output logic cir_q_full, cir_q_empty,
+    output logic cir_q_full, cir_q_empty, cir_q_empty_1,
     // output logic commit_ready,                      // Output signal to signify that we can commit the entry at commit_ptr but not actually committing it
 
     output logic [cir_q_index-1:0] issue_ptr_dbg,
@@ -44,7 +44,7 @@ logic [cir_q_index-1:0] issue_in, issue_out, commit_in, commit_out, rindex, wind
 logic [2**cir_q_offset-1:0] datain;
 logic [entry_size-1:0] data [num_entries-1:0];
 
-logic read, write;
+logic read, write, load_reg_full, cir_q_full_in;
 logic load_issue, load_commit, l_commit_out, load_l_commit, l_commit_in;
 
 assign issue_ptr_dbg = issue_out;
@@ -65,7 +65,9 @@ always_comb begin : CURR_STATE_LOGIC
     load_commit = 1'b0;
 	load_l_commit = 1'b0;
     cir_q_empty = 1'b0;
-    cir_q_full = 1'b0;
+    cir_q_empty_1 = 1'b0;
+    cir_q_full_in = 1'b0;
+    load_reg_full = 1'b0;
     windex = '0;
     rindex = '0;
     read = 1'b0;
@@ -75,31 +77,48 @@ always_comb begin : CURR_STATE_LOGIC
     unique case (curr_state)
         EMPTY       :  begin
             cir_q_empty = 1'b1;
+            cir_q_empty_1 = 1'b1;
             if (issue) begin
                 load_issue = 1'b1;
-                // cir_q_empty = 1'b0;
+                // load_l_commit = 1'b1;
+                cir_q_empty_1 = 1'b0;
                 write = 1'b1;
                 windex = issue_out;
                 datain = datain_issue;
             end
 		end	
         HAS_DATA    :   begin
-   
-            if (issue & ~cir_q_full) begin
-                load_issue = 1'b1;
-                // load_l_commit = 1'b1;
-                write = 1'b1;
-                windex = issue_out;
-                datain = datain_issue;
+            if ((issue_out == commit_out) & l_commit_out) begin
+                cir_q_empty = 1'b1;
+                cir_q_empty_1 = 1'b1;
+            end
+            if ((issue_out == commit_out) & ~l_commit_out) begin
+                cir_q_full_in = 1'b1;
+                load_reg_full = 1'b1;
+            end
+
+            if (issue) begin
+                if (~cir_q_full & ~cir_q_full_in) begin
+                    load_issue = 1'b1;
+                    write = 1'b1;
+                    load_l_commit = 1'b1;
+                    windex = issue_out;
+                    datain = datain_issue;
+                end
+                else begin
+                    load_reg_full = 1'b1;
+                    cir_q_full_in = 1'b1;
+                end
             end
             if (commit) begin
                 load_commit = 1'b1;
-                load_l_commit = 1'b1;
+                load_l_commit = l_commit_in;
                 read = 1'b1;
                 rindex = commit_out;
+                cir_q_full_in = 1'b0;
+                load_reg_full = 1'b1;
             end
-            if ((issue_out == commit_out) & l_commit_out) cir_q_empty = 1'b1;
-            if ((issue_out == commit_out) & ~l_commit_out) cir_q_full = 1'b1;
+    
             if (update) begin
                 write = 1'b1;
                 windex = update_index;
@@ -135,8 +154,8 @@ cir_q_data_array #(.s_offset(cir_q_offset), .s_index(cir_q_index)) DM_cir_q  (cl
 register #(.width(cir_q_index)) issue_ptr_reg (clk, rst, load_issue, issue_in, issue_out);
 register #(.width(cir_q_index)) commit_ptr_reg (clk, rst, load_commit, commit_in, commit_out);
 register #(.width(1)) l_commit_reg (clk, rst, load_l_commit, l_commit_in, l_commit_out);
+register #(.width(1)) full_reg (clk, rst, load_reg_full, cir_q_full_in, cir_q_full);
 endmodule : cir_q
-
 
 
 

@@ -1,5 +1,6 @@
 import Ld_St_structs::*;
 import rv_structs::*;
+import rob_entry_structs::*;
 
 module LD_ST_top(
     input clk,
@@ -13,7 +14,7 @@ module LD_ST_top(
 	 
 	 input rv_structs::data_bus_ld_st data_bus_ld_st,//ALU bus ONLY for mem address
     input rv_structs::data_bus_CMP data_bus_CMP,
-
+    input rob_entry_structs::rob_to_regfile rob_to_regfile,
     output logic cir_q_full,
     /*memory*/
     output logic pmem_read,
@@ -23,7 +24,9 @@ module LD_ST_top(
     output logic [31:0] pmem_address,
 
     output logic pmem_write,
-    output logic [31:0] pmem_wdata
+    output logic [31:0] pmem_wdata,
+    output logic [3:0] mem_byte_enable,
+    input sched_structs::ROBToALL ROBToALL
     /*memory*/
 );
 
@@ -39,9 +42,13 @@ logic src_valid_data_at_commit;
 logic [7:0] dest_rob_data_at_commit;
 logic [3:0] funct3_data_at_commit;
 
+logic rst_flush;
+
+assign rst_flush = rst | ROBToALL.flush_all;
+
 Ld_St Ld_St(
     .clk(clk),
-    .rst(rst),
+    .rst(rst_flush),
 
     .IQtoLD_ST(IQtoLD_ST), 
 
@@ -49,6 +56,7 @@ Ld_St Ld_St(
     .LD_ST_bus(LD_ST_bus),
 	 .data_bus_ld_st(data_bus_ld_st),
 	 .data_bus_CMP(data_bus_CMP),
+     .rob_to_regfile(rob_to_regfile),
 
     .commit(commit),//from controller
 
@@ -67,7 +75,7 @@ Ld_St Ld_St(
 
 mem_controller mem_controller(
     .clk(clk),
-    .rst(rst),
+    .rst(rst_flush),
 
     .cir_q_empty(cir_q_empty),
     .ld_st_data_at_commit(ld_st_data_at_commit),
@@ -89,7 +97,8 @@ mem_controller mem_controller(
     .pmem_address(pmem_address),
 
     .pmem_write(pmem_write),
-    .pmem_wdata(pmem_wdata)
+    .pmem_wdata(pmem_wdata),
+    .mem_byte_enable(mem_byte_enable)
     /*memory*/
 );
 

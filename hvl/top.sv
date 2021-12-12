@@ -110,21 +110,13 @@ top_1 dut(
     .clk                (itf.clk),
     .rst                (itf.rst),
 
-    .inst_rdata    (itf.inst_rdata),
-    .data_rdata    (itf.data_rdata),
-    .inst_resp     (itf.inst_resp),
-    .data_resp     (itf.data_resp),
+    .pmem_read    (itf.mem_read),
+    .pmem_write    (itf.mem_write),
+    .pmem_address     (itf.mem_addr),
+    .pmem_rdata     (itf.mem_rdata),
 
-    .inst_addr  (itf.inst_addr),
-    .data_addr  (itf.data_addr),
-    .data_wdata    (itf.data_wdata),
-    .inst_read     (itf.inst_read),
-    .data_read     (itf.data_read),
-
-    .data_write          (itf.data_write),
-
-    .mbe    (itf.data_mbe)
-    // .mem_byte_enable    (itf.data_mbe)
+    .pmem_wdata  (itf.mem_wdata),
+    .pmem_resp  (itf.mem_resp)
 );
 /***************************** End Instantiation *****************************/
 

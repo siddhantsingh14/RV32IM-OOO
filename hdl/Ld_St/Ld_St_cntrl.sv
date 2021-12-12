@@ -24,12 +24,14 @@ module mem_controller (
     output logic [31:0] pmem_address,
 
     output logic pmem_write,
-    output logic [31:0] pmem_wdata
-    /*memory*/
+    output logic [31:0] pmem_wdata,
+    output logic [3:0] mem_byte_enable
+        /*memory*/
 );
 
 enum int unsigned {
     COMMIT_POLL,//wait for mem resp and for validity
+    COMMIT_ACTION,
     COMMIT_LD,//commit here 
     COMMIT_ST,//commit here
 	 WAIT,
@@ -90,6 +92,7 @@ begin
     pmem_address = '0;
     pmem_write = 1'b0;
     pmem_wdata = '0;
+    mem_byte_enable = 4'b1111;
     commit = 1'b0;
 //    LD_ST_bus.valid = 1'b0;
 //    LD_ST_bus.value = '0;
@@ -97,7 +100,9 @@ begin
 //	 LD_ST_bus.st = 1'b0;
 
     unique case (curr_state)
-        COMMIT_POLL:
+        COMMIT_POLL:    ;
+
+        COMMIT_ACTION:
         begin
             if(!cir_q_empty)
             begin
@@ -106,8 +111,30 @@ begin
                     if(src_valid_data_at_commit && valid_mem_address_data_at_commit)
                     begin
                         pmem_write = 1'b1;
-                        pmem_wdata = write_data_at_commit;
+                        // pmem_wdata = write_data_at_commit;
                         pmem_address = {mem_address_data_at_commit[31:2], 2'b00};
+                        case(funct3_data_at_commit)
+                        4'b0000: begin
+                            mem_byte_enable = {4'b0001 << mem_address_data_at_commit[1:0]};
+                            unique case(mem_address_data_at_commit[1:0])
+                                2'b00: pmem_wdata = write_data_at_commit;
+                                2'b01: pmem_wdata = write_data_at_commit<<8;
+                                2'b10: pmem_wdata = write_data_at_commit<<16;
+                                2'b11: pmem_wdata = write_data_at_commit<<24;
+                            endcase
+                        end
+                        4'b0001: begin
+                            mem_byte_enable = {4'b0011 << mem_address_data_at_commit[1:0]};
+                            unique case(mem_address_data_at_commit[1:0])
+                                2'b00: pmem_wdata = write_data_at_commit;
+                                2'b01: pmem_wdata = write_data_at_commit<<16;
+                            endcase
+                        end
+                        4'b0010: begin
+                            mem_byte_enable = '1;
+                            pmem_wdata = write_data_at_commit;
+                        end
+                        endcase
                     end
                     else
                     begin
@@ -190,26 +217,49 @@ begin
         COMMIT_POLL:
         begin
             if(!cir_q_empty)
+            // begin
+                // if(ld_st_data_at_commit)
+                // begin//store
+                    // if(src_valid_data_at_commit && pmem_resp && valid_mem_address_data_at_commit)
+                next_state = COMMIT_ACTION;
+            else
+                next_state = COMMIT_POLL;
+                // end
+                // else//load
+            //     begin
+            //         if(pmem_resp && valid_mem_address_data_at_commit)
+            //             next_state = COMMIT_ACTION;
+            //         else
+            //             next_state = COMMIT_POLL;
+            //     end
+            // end
+            // else
+            //     next_state = COMMIT_POLL;
+        end
+
+        COMMIT_ACTION:
+        begin
+            if(!cir_q_empty)
             begin
                 if(ld_st_data_at_commit)
                 begin//store
                     if(src_valid_data_at_commit && pmem_resp && valid_mem_address_data_at_commit)
                         next_state = COMMIT_ST;
                     else
-                        next_state = COMMIT_POLL;
+                        next_state = COMMIT_ACTION;
                 end
                 else//load
                 begin
                     if(pmem_resp && valid_mem_address_data_at_commit)
                         next_state = COMMIT_LD;
                     else
-                        next_state = COMMIT_POLL;
+                        next_state = COMMIT_ACTION;
                 end
             end
             else
                 next_state = COMMIT_POLL;
         end
-
+		  
         COMMIT_ST:
             next_state = WAIT;
 

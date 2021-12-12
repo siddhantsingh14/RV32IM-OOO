@@ -10,7 +10,15 @@ typedef struct packed {
  logic [31:0] src2_value;
  logic src2_valid;
  logic valid;
- logic [31:0] br_pc_out;
+ logic [31:0] pc;
+ logic is_jump;
+ logic is_jump_r;
+ logic br_pc_in1_valid;
+ logic [31:0] br_pc_in1_value;
+ logic [4:0] br_pc_in1_rob;
+ logic [31:0] br_pc_in2_value;
+ logic [4:0] br_pc_in2_rob;
+ logic br_pc_in2_valid;
 }Reservation_st;
 
 
@@ -42,8 +50,11 @@ typedef struct packed {
 typedef struct packed {
  logic value;
  logic valid;
- logic [31:0] br_pc_out;
+ logic [31:0] br_pc_out;        // br_pc_in1_value + br_pc_in2_value = br_pc_out
+ logic [31:0] pc;
+ logic is_jump;
  logic [4:0] dest_rob;
+ logic is_jump_r;
 }data_bus_CMP_br;
 
 typedef struct packed {
@@ -69,7 +80,7 @@ typedef struct packed {
 
 typedef struct packed {
  logic load_RS;
- //logic [3:0] RS_sel;
+ logic [3:0] RS_sel;
  logic [4:0] dest_rob;
  logic [2:0] alu_ops;
  logic [4:0] src1_rob;
@@ -78,7 +89,15 @@ typedef struct packed {
  logic [4:0] src2_rob;
  logic [31:0] src2_value;
  logic src2_valid;
- logic [31:0] br_pc_out;
+ logic br_pc_in1_valid;
+ logic [31:0] br_pc_in1_value;
+ logic [4:0] br_pc_in1_rob;
+ logic [31:0] br_pc_in2_value;
+ logic [4:0] br_pc_in2_rob;
+ logic br_pc_in2_valid;
+ logic [31:0] pc;
+ logic is_jump;
+ logic is_jump_r;
 }IQtoRS_br;
 
 typedef struct packed {//which rob
@@ -100,10 +119,14 @@ typedef struct packed {//which rob
 typedef struct packed {//which rob
  logic ld_cmp;
  logic [4:0]rob_idx;
- logic [31:0] br_pc_out;
+ logic [31:0] pc;
+ logic is_jump;
+ logic is_jump_r;
  logic [2:0] cmp_op;
  logic [31:0] cmp_src1;
  logic [31:0] cmp_src2; 
+ logic [31:0] br_pc_in1_value;
+ logic [31:0] br_pc_in2_value;
 }RStoCMP_br;
 
 

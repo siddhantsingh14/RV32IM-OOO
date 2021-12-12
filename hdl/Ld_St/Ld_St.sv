@@ -1,5 +1,6 @@
 import Ld_St_structs::*;
 import rv_structs::*;
+import rob_entry_structs::*;
 
 module Ld_St(
     input clk,
@@ -11,7 +12,7 @@ module Ld_St(
     input Ld_St_structs::LD_ST_bus LD_ST_bus,//bus from ld_st unit
     input rv_structs::data_bus_ld_st data_bus_ld_st,//ALU bus ONLY for mem address
    input rv_structs::data_bus_CMP data_bus_CMP,
-
+    input rob_entry_structs::rob_to_regfile rob_to_regfile,
     input logic commit,//from controller
 
     output logic cir_q_full, cir_q_empty,
@@ -66,20 +67,20 @@ Ld_St_structs::valid_cirq valid_cirq;
 Ld_St_structs::dest_rob_cirq dest_rob_cirq;
 Ld_St_structs::funct3_cirq funct3_cirq;
 
-Ld_St_structs::look_up_rob look_up_src[7];
-Ld_St_structs::output_look_up_rob output_look_up_src[7];
-Ld_St_structs::look_up_valid look_up_valid_src[7];
-Ld_St_structs::output_look_up_valid output_look_up_valid_src[7];
+Ld_St_structs::look_up_rob look_up_src[8];
+Ld_St_structs::output_look_up_rob output_look_up_src[8];
+Ld_St_structs::look_up_valid look_up_valid_src[8];
+Ld_St_structs::output_look_up_valid output_look_up_valid_src[8];
 Ld_St_structs::look_up_rob look_up_mem_addr;
 Ld_St_structs::output_look_up_rob output_look_up_mem_addr;
 Ld_St_structs::look_up_valid look_up_valid_mem_addr;
 Ld_St_structs::output_look_up_valid output_look_up_valid_mem_addr;
-Ld_St_structs::update_32 update_write_data[7];
-Ld_St_structs::update_1 update_valid[7];
+Ld_St_structs::update_32 update_write_data[8];
+Ld_St_structs::update_1 update_valid[8];
 Ld_St_structs::update_32 update_mem_address;
 Ld_St_structs::update_1 update_valid_mem_address;
 
-Ld_St_structs::buffer_bus buffer_bus[8];
+Ld_St_structs::buffer_bus buffer_bus[9];
 
 assign cir_q_full = LD_ST_cirq.cir_q_full;
 assign cir_q_empty = LD_ST_cirq.cir_q_empty;
@@ -88,34 +89,34 @@ always_ff @(posedge clk)
 begin
     if(rst)
     begin
-        LD_ST_cirq.issue <= '0;
-        LD_ST_cirq.commit <= '0;
-        LD_ST_cirq.datain_issue <= '0;
-        mem_address_cirq.issue <= '0;
-        mem_address_cirq.commit <= '0;
-        mem_address_cirq.datain_issue <= '0;
-        src_rob_mem_address_cirq.issue <= '0;
-        src_rob_mem_address_cirq.commit <= '0;
-        src_rob_mem_address_cirq.datain_issue <= '0;
-        valid_mem_address_cirq.issue <= '0;
-        valid_mem_address_cirq.commit <= '0;
-        valid_mem_address_cirq.datain_issue <= '0;
-        write_data_cirq.issue <= '0;
-        write_data_cirq.commit <= '0;
-        write_data_cirq.datain_issue <= '0;
-        src_rob_cirq.issue <= '0;
-        src_rob_cirq.commit <= '0;
-        src_rob_cirq.datain_issue <= '0;
-        valid_cirq.issue <= '0;
-        valid_cirq.commit <= '0;
-        valid_cirq.datain_issue <= '0;
-        dest_rob_cirq.issue <= '0;
-        dest_rob_cirq.commit <= '0;
-        dest_rob_cirq.datain_issue <= '0;//
-        funct3_cirq.issue <= '0;
-        funct3_cirq.commit <= '0;
-        funct3_cirq.datain_issue <= '0;
-        for(int i = 0; i < 7; i++)
+        // LD_ST_cirq.issue <= '0;
+        // LD_ST_cirq.commit <= '0;
+        // LD_ST_cirq.datain_issue <= '0;
+        // mem_address_cirq.issue <= '0;
+        // mem_address_cirq.commit <= '0;
+        // mem_address_cirq.datain_issue <= '0;
+        // src_rob_mem_address_cirq.issue <= '0;
+        // src_rob_mem_address_cirq.commit <= '0;
+        // src_rob_mem_address_cirq.datain_issue <= '0;
+        // valid_mem_address_cirq.issue <= '0;
+        // valid_mem_address_cirq.commit <= '0;
+        // valid_mem_address_cirq.datain_issue <= '0;
+        // write_data_cirq.issue <= '0;
+        // write_data_cirq.commit <= '0;
+        // write_data_cirq.datain_issue <= '0;
+        // src_rob_cirq.issue <= '0;
+        // src_rob_cirq.commit <= '0;
+        // src_rob_cirq.datain_issue <= '0;
+        // valid_cirq.issue <= '0;
+        // valid_cirq.commit <= '0;
+        // valid_cirq.datain_issue <= '0;
+        // dest_rob_cirq.issue <= '0;
+        // dest_rob_cirq.commit <= '0;
+        // dest_rob_cirq.datain_issue <= '0;//
+        // funct3_cirq.issue <= '0;
+        // funct3_cirq.commit <= '0;
+        // funct3_cirq.datain_issue <= '0;
+        for(int i = 0; i < 8; i++)
         begin
             look_up_src[i].rob_idx <= '0;
             look_up_src[i].valid <= '0;
@@ -128,56 +129,56 @@ begin
 		  look_up_mem_addr.valid <= '0;
 	     look_up_valid_mem_addr.value <= '0;
 		  look_up_valid_mem_addr.valid <= '0;
-		  buffer_bus[7].data <= '0;
-        buffer_bus[7].valid <= '0;
+		  buffer_bus[8].data <= '0;
+        buffer_bus[8].valid <= '0;
 
     end
     else
     begin
-        if(IQtoLD_ST.issue)	//issue is not working
-        begin
-            LD_ST_cirq.issue <= IQtoLD_ST.issue;
-            mem_address_cirq.issue <= IQtoLD_ST.issue;
-            src_rob_mem_address_cirq.issue <= IQtoLD_ST.issue;
-            valid_mem_address_cirq.issue <= IQtoLD_ST.issue;
-            write_data_cirq.issue <= IQtoLD_ST.issue;
-            src_rob_cirq.issue <= IQtoLD_ST.issue;
-            valid_cirq.issue <= IQtoLD_ST.issue;
-            dest_rob_cirq.issue <= IQtoLD_ST.issue;
-            funct3_cirq.issue <= IQtoLD_ST.issue;
+        // if(IQtoLD_ST.issue)	//issue is not working
+        // begin
+        //     LD_ST_cirq.issue <= IQtoLD_ST.issue;
+        //     mem_address_cirq.issue <= IQtoLD_ST.issue;
+        //     src_rob_mem_address_cirq.issue <= IQtoLD_ST.issue;
+        //     valid_mem_address_cirq.issue <= IQtoLD_ST.issue;
+        //     write_data_cirq.issue <= IQtoLD_ST.issue;
+        //     src_rob_cirq.issue <= IQtoLD_ST.issue;
+        //     valid_cirq.issue <= IQtoLD_ST.issue;
+        //     dest_rob_cirq.issue <= IQtoLD_ST.issue;
+        //     funct3_cirq.issue <= IQtoLD_ST.issue;
 
-            LD_ST_cirq.datain_issue <= IQtoLD_ST.ld_st;
-            mem_address_cirq.datain_issue <= IQtoLD_ST.mem_addr;
-            src_rob_mem_address_cirq.datain_issue <= {3'd0, IQtoLD_ST.src_rob_mem_addr};
-            valid_mem_address_cirq.datain_issue <= IQtoLD_ST.valid_src_mem_addr;
-            write_data_cirq.datain_issue <= IQtoLD_ST.write_data;
-            src_rob_cirq.datain_issue <= {3'd0, IQtoLD_ST.src_rob_write_data};
-            valid_cirq.datain_issue <= IQtoLD_ST.src_valid_write_data;
-            dest_rob_cirq.datain_issue <= {3'd0, IQtoLD_ST.dest_rob};
-            funct3_cirq.datain_issue <= {1'b0, IQtoLD_ST.funct3};
-        end
-        else if(~IQtoLD_ST.issue)
-        begin
-            LD_ST_cirq.issue <= '0;
-            mem_address_cirq.issue <= '0;
-            src_rob_mem_address_cirq.issue <= '0;
-            valid_mem_address_cirq.issue <= '0;
-            write_data_cirq.issue <= '0;
-            src_rob_cirq.issue <= '0;
-            valid_cirq.issue <= '0;
-            dest_rob_cirq.issue <= '0;
-            funct3_cirq.issue <= '0;
+        //     LD_ST_cirq.datain_issue <= IQtoLD_ST.ld_st;
+        //     mem_address_cirq.datain_issue <= IQtoLD_ST.mem_addr;
+        //     src_rob_mem_address_cirq.datain_issue <= {3'd0, IQtoLD_ST.src_rob_mem_addr};
+        //     valid_mem_address_cirq.datain_issue <= IQtoLD_ST.valid_src_mem_addr;
+        //     write_data_cirq.datain_issue <= IQtoLD_ST.write_data;
+        //     src_rob_cirq.datain_issue <= {3'd0, IQtoLD_ST.src_rob_write_data};
+        //     valid_cirq.datain_issue <= IQtoLD_ST.src_valid_write_data;
+        //     dest_rob_cirq.datain_issue <= {3'd0, IQtoLD_ST.dest_rob};
+        //     funct3_cirq.datain_issue <= {1'b0, IQtoLD_ST.funct3};
+        // end
+        // else if(~IQtoLD_ST.issue)
+        // begin
+        //     LD_ST_cirq.issue <= '0;
+        //     mem_address_cirq.issue <= '0;
+        //     src_rob_mem_address_cirq.issue <= '0;
+        //     valid_mem_address_cirq.issue <= '0;
+        //     write_data_cirq.issue <= '0;
+        //     src_rob_cirq.issue <= '0;
+        //     valid_cirq.issue <= '0;
+        //     dest_rob_cirq.issue <= '0;
+        //     funct3_cirq.issue <= '0;
 
-            LD_ST_cirq.datain_issue <= '0;
-            mem_address_cirq.datain_issue <= '0;
-            src_rob_mem_address_cirq.datain_issue <= '0;
-            valid_mem_address_cirq.datain_issue <= '0;
-            write_data_cirq.datain_issue <= '0;
-            src_rob_cirq.datain_issue <= '0;
-            valid_cirq.datain_issue <= '0;
-            dest_rob_cirq.datain_issue <= '0;
-            funct3_cirq.datain_issue <= '0;
-        end
+        //     LD_ST_cirq.datain_issue <= '0;
+        //     mem_address_cirq.datain_issue <= '0;
+        //     src_rob_mem_address_cirq.datain_issue <= '0;
+        //     valid_mem_address_cirq.datain_issue <= '0;
+        //     write_data_cirq.datain_issue <= '0;
+        //     src_rob_cirq.datain_issue <= '0;
+        //     valid_cirq.datain_issue <= '0;
+        //     dest_rob_cirq.datain_issue <= '0;
+        //     funct3_cirq.datain_issue <= '0;
+        // end
 
         if(bus[0].valid)
         begin
@@ -368,10 +369,37 @@ begin
             // look_up_valid_mem_addr[5].valid <= '0;
         end
 
+        if(rob_to_regfile.valid)
+        begin
+            buffer_bus[7].data <= rob_to_regfile.value;
+            buffer_bus[7].valid <= rob_to_regfile.valid;
+            look_up_src[7].rob_idx <= {3'd0, rob_to_regfile.rob_idx};
+            look_up_src[7].valid <= rob_to_regfile.valid;
+            look_up_valid_src[7].value <= 1'b1;
+            look_up_valid_src[7].valid <= 1'b1;
+            // look_up_mem_addr[5].rob_idx <= {3'd0, LD_ST_bus.dest_rob};
+            // look_up_mem_addr[5].valid <= LD_ST_bus.valid;
+            // look_up_valid_mem_addr[5].value <= 1'b1;
+            // look_up_valid_mem_addr[5].valid <= 1'b1;
+        end
+        else if(~rob_to_regfile.valid)
+        begin
+            buffer_bus[7].data <= '0;
+            buffer_bus[7].valid <= '0;
+            look_up_src[7].rob_idx <= '0;
+            look_up_src[7].valid <= '0;
+            look_up_valid_src[7].value <= '0;
+            look_up_valid_src[7].valid <= '0;
+            // look_up_mem_addr[5].rob_idx <= '0;
+            // look_up_mem_addr[5].valid <= '0;
+            // look_up_valid_mem_addr[5].value <= '0;
+            // look_up_valid_mem_addr[5].valid <= '0;
+        end
+
         if(data_bus_ld_st.valid)
         begin
-            buffer_bus[7].data <= data_bus_ld_st.value;
-            buffer_bus[7].valid <= data_bus_ld_st.valid;
+            buffer_bus[8].data <= data_bus_ld_st.value;
+            buffer_bus[8].valid <= data_bus_ld_st.valid;
             look_up_mem_addr.rob_idx <= {3'd0, data_bus_ld_st.dest_rob};
             look_up_mem_addr.valid <= data_bus_ld_st.valid;
             look_up_valid_mem_addr.value <= 1'b1;
@@ -379,44 +407,146 @@ begin
         end
         else if(~data_bus_ld_st.valid)
         begin
-            buffer_bus[7].data <= '0;
-            buffer_bus[7].valid <= '0;
+            buffer_bus[8].data <= '0;
+            buffer_bus[8].valid <= '0;
             look_up_mem_addr.rob_idx <= '0;
             look_up_mem_addr.valid <= '0;
             look_up_valid_mem_addr.value <= '0;
             look_up_valid_mem_addr.valid <= '0;
         end
 
-        if(commit)
-        begin
-            LD_ST_cirq.commit <= 1'b1;
-            mem_address_cirq.commit <= 1'b1;
-            src_rob_mem_address_cirq.commit <= 1'b1;
-            valid_mem_address_cirq.commit <= 1'b1;
-            write_data_cirq.commit <= 1'b1;
-            src_rob_cirq.commit <= 1'b1;
-            valid_cirq.commit <= 1'b1;
-            dest_rob_cirq.commit <= 1'b1;
-            funct3_cirq.commit <= 1'b1;
-        end
-		  else if(~commit)
-		  begin
-			LD_ST_cirq.commit <= 1'b0;
-            mem_address_cirq.commit <= 1'b0;
-            src_rob_mem_address_cirq.commit <= 1'b0;
-            valid_mem_address_cirq.commit <= 1'b0;
-            write_data_cirq.commit <= 1'b0;
-            src_rob_cirq.commit <= 1'b0;
-            valid_cirq.commit <= 1'b0;
-            dest_rob_cirq.commit <= 1'b0;
-            funct3_cirq.commit <= 1'b0;
-		  end
+        // if(commit)
+        // begin
+        //     LD_ST_cirq.commit <= 1'b1;
+        //     mem_address_cirq.commit <= 1'b1;
+        //     src_rob_mem_address_cirq.commit <= 1'b1;
+        //     valid_mem_address_cirq.commit <= 1'b1;
+        //     write_data_cirq.commit <= 1'b1;
+        //     src_rob_cirq.commit <= 1'b1;
+        //     valid_cirq.commit <= 1'b1;
+        //     dest_rob_cirq.commit <= 1'b1;
+        //     funct3_cirq.commit <= 1'b1;
+        // end
+		//   else if(~commit)
+		//   begin
+		// 	LD_ST_cirq.commit <= 1'b0;
+        //     mem_address_cirq.commit <= 1'b0;
+        //     src_rob_mem_address_cirq.commit <= 1'b0;
+        //     valid_mem_address_cirq.commit <= 1'b0;
+        //     write_data_cirq.commit <= 1'b0;
+        //     src_rob_cirq.commit <= 1'b0;
+        //     valid_cirq.commit <= 1'b0;
+        //     dest_rob_cirq.commit <= 1'b0;
+        //     funct3_cirq.commit <= 1'b0;
+		//   end
     end
 end
 
 always_comb
 begin
-    for(int i = 0; i <= 6; i++)
+
+    LD_ST_cirq.issue = '0;
+        LD_ST_cirq.commit = '0;
+        LD_ST_cirq.datain_issue = '0;
+        mem_address_cirq.issue = '0;
+        mem_address_cirq.commit = '0;
+        mem_address_cirq.datain_issue = '0;
+        src_rob_mem_address_cirq.issue = '0;
+        src_rob_mem_address_cirq.commit = '0;
+        src_rob_mem_address_cirq.datain_issue = '0;
+        valid_mem_address_cirq.issue = '0;
+        valid_mem_address_cirq.commit = '0;
+        valid_mem_address_cirq.datain_issue = '0;
+        write_data_cirq.issue = '0;
+        write_data_cirq.commit = '0;
+        write_data_cirq.datain_issue = '0;
+        src_rob_cirq.issue = '0;
+        src_rob_cirq.commit = '0;
+        src_rob_cirq.datain_issue = '0;
+        valid_cirq.issue = '0;
+        valid_cirq.commit = '0;
+        valid_cirq.datain_issue = '0;
+        dest_rob_cirq.issue = '0;
+        dest_rob_cirq.commit = '0;
+        dest_rob_cirq.datain_issue = '0;//
+        funct3_cirq.issue = '0;
+        funct3_cirq.commit = '0;
+        funct3_cirq.datain_issue = '0;
+
+    if(IQtoLD_ST.issue)	//issue is not working
+        begin
+            LD_ST_cirq.issue = IQtoLD_ST.issue;
+            mem_address_cirq.issue = IQtoLD_ST.issue;
+            src_rob_mem_address_cirq.issue = IQtoLD_ST.issue;
+            valid_mem_address_cirq.issue = IQtoLD_ST.issue;
+            write_data_cirq.issue = IQtoLD_ST.issue;
+            src_rob_cirq.issue = IQtoLD_ST.issue;
+            valid_cirq.issue = IQtoLD_ST.issue;
+            dest_rob_cirq.issue = IQtoLD_ST.issue;
+            funct3_cirq.issue = IQtoLD_ST.issue;
+
+            LD_ST_cirq.datain_issue = IQtoLD_ST.ld_st;
+            mem_address_cirq.datain_issue = IQtoLD_ST.mem_addr;
+            src_rob_mem_address_cirq.datain_issue = {3'd0, IQtoLD_ST.src_rob_mem_addr};
+            valid_mem_address_cirq.datain_issue = IQtoLD_ST.valid_src_mem_addr;
+            write_data_cirq.datain_issue = IQtoLD_ST.write_data;
+            src_rob_cirq.datain_issue = {3'd0, IQtoLD_ST.src_rob_write_data};
+            valid_cirq.datain_issue = IQtoLD_ST.src_valid_write_data;
+            dest_rob_cirq.datain_issue = {3'd0, IQtoLD_ST.dest_rob};
+            funct3_cirq.datain_issue = {1'b0, IQtoLD_ST.funct3};
+        end
+        else// if(~IQtoLD_ST.issue)
+        begin
+            LD_ST_cirq.issue = '0;
+            mem_address_cirq.issue = '0;
+            src_rob_mem_address_cirq.issue = '0;
+            valid_mem_address_cirq.issue = '0;
+            write_data_cirq.issue = '0;
+            src_rob_cirq.issue = '0;
+            valid_cirq.issue = '0;
+            dest_rob_cirq.issue = '0;
+            funct3_cirq.issue = '0;
+
+            LD_ST_cirq.datain_issue = '0;
+            mem_address_cirq.datain_issue = '0;
+            src_rob_mem_address_cirq.datain_issue = '0;
+            valid_mem_address_cirq.datain_issue = '0;
+            write_data_cirq.datain_issue = '0;
+            src_rob_cirq.datain_issue = '0;
+            valid_cirq.datain_issue = '0;
+            dest_rob_cirq.datain_issue = '0;
+            funct3_cirq.datain_issue = '0;
+        end
+
+    if(commit)
+        begin
+            LD_ST_cirq.commit = 1'b1;
+            mem_address_cirq.commit = 1'b1;
+            src_rob_mem_address_cirq.commit = 1'b1;
+            valid_mem_address_cirq.commit = 1'b1;
+            write_data_cirq.commit = 1'b1;
+            src_rob_cirq.commit = 1'b1;
+            valid_cirq.commit = 1'b1;
+            dest_rob_cirq.commit = 1'b1;
+            funct3_cirq.commit = 1'b1;
+        end
+	else //if(~commit)
+		  begin
+			LD_ST_cirq.commit = 1'b0;
+            mem_address_cirq.commit = 1'b0;
+            src_rob_mem_address_cirq.commit = 1'b0;
+            valid_mem_address_cirq.commit = 1'b0;
+            write_data_cirq.commit = 1'b0;
+            src_rob_cirq.commit = 1'b0;
+            valid_cirq.commit = 1'b0;
+            dest_rob_cirq.commit = 1'b0;
+            funct3_cirq.commit = 1'b0;
+		  end
+end
+
+always_comb
+begin
+    for(int i = 0; i <= 7; i++)
     begin
         if(output_look_up_src[i].valid && output_look_up_valid_src[i].valid)
         begin
@@ -487,7 +617,7 @@ begin
     if(output_look_up_mem_addr.valid && output_look_up_valid_mem_addr.valid)
     begin
         update_mem_address.valid = output_look_up_mem_addr.valid;
-        update_mem_address.update_data = buffer_bus[7].data;
+        update_mem_address.update_data = buffer_bus[8].data;
 
         update_valid_mem_address.valid = output_look_up_mem_addr.valid;
         update_valid_mem_address.update_data = 1'b1;

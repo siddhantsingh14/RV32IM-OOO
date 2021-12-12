@@ -106,7 +106,6 @@ pcrel_TEMP1_2: auipc x14, %pcrel_hi(TEMP1)
     nop
     nop
     sw x6, 0(x9)   # TEMP1 <= x6
-    nop
     lw x7, %pcrel_lo(pcrel_TEMP1_2)(x14) # X7    <= TEMP1
     add x1, x1, x4 # X1    <= X1 + X4
     nop

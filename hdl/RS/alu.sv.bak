@@ -82,10 +82,8 @@ begin
     if(RStoCMP_br.ld_cmp)
     begin
         data_bus_CMP_br.valid = 1'b1;
-        data_bus_CMP_br.br_pc_out = RStoCMP_br.br_pc_in1_value + RStoCMP_br.br_pc_in2_value;
+        data_bus_CMP_br.br_pc_out = RStoCMP_br.br_pc_out;
         data_bus_CMP_br.pc = RStoCMP_br.pc;
-        data_bus_CMP_br.is_jump = RStoCMP_br.is_jump;
-        data_bus_CMP_br.is_jump_r = RStoCMP_br.is_jump_r;
 		  data_bus_CMP_br.dest_rob = RStoCMP_br.rob_idx;
         unique case (RStoCMP_br.cmp_op)
             3'b000: data_bus_CMP_br.value = (RStoCMP_br.cmp_src1 == RStoCMP_br.cmp_src2);

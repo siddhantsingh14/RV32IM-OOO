@@ -18,6 +18,7 @@ module cir_q_rob #(
     input [cir_q_index-1:0] update_index_4,
     input [cir_q_index-1:0] update_index_cmp,
     input [cir_q_index-1:0] update_index_ld,
+    input [cir_q_index-1:0] update_index_br,
     
 
     input issue,                                // Signal to initiate an issue => issue_ptr++ 
@@ -29,6 +30,7 @@ module cir_q_rob #(
     input update_4,
     input update_cmp,
     input update_ld,
+    input update_br,
 
     input logic [2**cir_q_offset-1:0] datain_issue,
     input logic [2**cir_q_offset-1:0] datain_update_0,
@@ -38,9 +40,14 @@ module cir_q_rob #(
     input logic [2**cir_q_offset-1:0] datain_update_4,
     input logic [2**cir_q_offset-1:0] datain_update_cmp,
     input logic [2**cir_q_offset-1:0] datain_update_ld,
+    input logic [2**cir_q_offset-1:0] datain_update_br,
 
     output logic commit_ready,
     input logic is_done_bit,
+    input logic is_jump_bit,
+    input logic is_br_bit,
+    output logic is_br_in_rob,
+    output logic is_jump_in_rob,
     // output [4:0] possible_commits, 
 
     output logic [2**cir_q_offset-1:0] dataout,
@@ -58,18 +65,18 @@ localparam entry_size = 2**cir_q_offset;
 localparam num_entries = 2**cir_q_index;
 
 logic [cir_q_index-1:0] issue_in, issue_out, commit_in, commit_out;    // Pointers to keep track of indices 
-logic [2**cir_q_offset-1:0] datain, datain_1, datain_2, datain_3, datain_4, datain_5, datain_cmp, datain_ld;
+logic [2**cir_q_offset-1:0] datain, datain_1, datain_2, datain_3, datain_4, datain_5, datain_cmp, datain_ld, datain_br;
 logic [entry_size-1:0] data [num_entries-1:0];
 
-logic [cir_q_index-1:0] rindex, windex, windex_1, windex_2, windex_3, windex_4, windex_5, windex_cmp, windex_ld;
-logic read, write, write_1, write_2, write_3, write_4, write_5, write_cmp, write_ld;
+logic [cir_q_index-1:0] rindex, windex, windex_1, windex_2, windex_3, windex_4, windex_5, windex_cmp, windex_ld, windex_br;
+logic read, write, write_1, write_2, write_3, write_4, write_5, write_cmp, write_ld, write_br;
 logic load_issue, load_commit, l_commit_out, load_l_commit, l_commit_in;
 logic update_en;
 
 
-
 assign issue_mod_out = issue_out;
 assign commit_mod_out = commit_out;
+
 
 assign commit_ptr_rob_idx = commit_out - 1;
 // assign cir_q_full = (commit_out == issue_out) & ~l_commit_out;
@@ -113,6 +120,10 @@ always_comb begin : CURR_STATE_LOGIC
     write_ld = '0;
     windex_ld = '0;
     datain_ld = '0;
+
+    write_br = '0;
+    windex_br = '0;
+    datain_br = '0;
 
     unique case (curr_state)
         EMPTY       :  begin
@@ -193,6 +204,14 @@ always_comb begin : CURR_STATE_LOGIC
                 windex_ld = update_index_ld;
                 datain_ld = datain_update_ld;
             end
+
+            if(update_br)    begin
+                update_en = 1'b1;
+                rindex = commit_out;
+                write_br = 1'b1;
+                windex_br = update_index_br;
+                datain_br = datain_update_br;
+            end
             if ((issue_out == commit_out) & l_commit_out) cir_q_empty = 1'b1;
             if ((commit_out == issue_out) & ~l_commit_out)  cir_q_full = 1'b1;
         end
@@ -220,7 +239,7 @@ always_ff @(posedge clk) begin
 	 end	  
 end
 
-cir_q_data_array_rob #(.s_offset(cir_q_offset), .s_index(cir_q_index)) DM_cir_q  (clk, rst, read, write, write_1, write_2, write_3, write_4, write_5, write_cmp, write_ld, rindex, windex, windex_1, windex_2, windex_3, windex_4, windex_5, windex_cmp, windex_ld, datain, datain_1, datain_2, datain_3, datain_4, datain_5, datain_cmp, datain_ld, dataout, commit_ready, is_done_bit, update_en);
+cir_q_data_array_rob #(.s_offset(cir_q_offset), .s_index(cir_q_index)) DM_cir_q  (clk, rst, read, write, write_1, write_2, write_3, write_4, write_5, write_cmp, write_ld, write_br, rindex, windex, windex_1, windex_2, windex_3, windex_4, windex_5, windex_cmp, windex_ld, windex_br, datain, datain_1, datain_2, datain_3, datain_4, datain_5, datain_cmp, datain_ld, datain_br, dataout, commit_ready, is_done_bit, update_en, is_jump_bit, is_br_bit, is_br_in_rob, is_jump_in_rob, issue_out, commit_out, cir_q_full);
 register #(.width(cir_q_index)) issue_ptr_reg (clk, rst, load_issue, issue_in, issue_out);
 register #(.width(cir_q_index)) commit_ptr_reg (clk, rst, load_commit, commit_in, commit_out);
 register #(.width(1)) l_commit_reg (clk, rst, load_l_commit, l_commit_in, l_commit_out);
